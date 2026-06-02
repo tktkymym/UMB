@@ -1518,13 +1518,17 @@ class FOMO(nn.Module):
 
 class PostProcess(nn.Module):
     """ This module converts the model's output into the format expected by the coco api"""
-    def __init__(self, model_name, pred_per_im=100, image_resize=768, device='cpu', method='regular'):
+    def __init__(self, model_name, pred_per_im=100, image_resize=768, device='cpu', method='regular', args=None):
         super().__init__()
         self.processor = OwlViTProcessor.from_pretrained(model_name)
         self.pred_per_im = pred_per_im
         self.method=method
         self.image_resize = image_resize
         self.device = device
+        self.use_postprocess_known_gate = getattr(args, 'use_postprocess_known_gate', False)
+        self.post_gate_known_threshold = getattr(args, 'post_gate_known_threshold', 0.15)
+        self.post_gate_unknown_margin = getattr(args, 'post_gate_unknown_margin', 1.1)
+        self.post_gate_floor = getattr(args, 'post_gate_floor', 0.05)
         self.clip_boxes = lambda x, y: torch.cat(
             [x[:, 0].clamp_(min=0, max=y[1]).unsqueeze(1),
              x[:, 1].clamp_(min=0, max=y[0]).unsqueeze(1),
@@ -1562,6 +1566,17 @@ class PostProcess(nn.Module):
         logits, obj, boxes = outputs.logits, outputs.obj, outputs.pred_boxes
         prob = torch.sigmoid(logits)            # 直接用sigmoid函数将logits转换为概率
         prob[..., -1] *= obj
+        if self.use_postprocess_known_gate and prob.shape[-1] > 1:
+            known_best = prob[..., :-1].max(dim=-1).values
+            unknown_score = prob[..., -1]
+            known_confident = known_best >= self.post_gate_known_threshold
+            unknown_not_dominant = unknown_score <= (known_best * self.post_gate_unknown_margin)
+            gate_mask = known_confident & unknown_not_dominant
+            prob[..., -1] = torch.where(
+                gate_mask,
+                unknown_score * self.post_gate_floor,
+                unknown_score,
+            )
         
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
@@ -1720,5 +1735,5 @@ def build(args):
     model = FOMO(args, args.model_name, known_class_names, unknown_class_names,
                  templates, args.image_conditioned, device)
 
-    postprocessors = PostProcess(args.model_name, args.pred_per_im, args.image_resize, device, method=args.post_process_method)
+    postprocessors = PostProcess(args.model_name, args.pred_per_im, args.image_resize, device, method=args.post_process_method, args=args)
     return model, postprocessors

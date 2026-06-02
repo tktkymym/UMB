@@ -148,6 +148,44 @@ The first Game experiment used `source=softmax`, `tau=0.6`, `gamma=1.0`, and `fl
 
 This indicates that maximum known softmax confidence is too weak as a gate signal for the 30-class Game domain. A second experiment is now running with `source=sigmoid`, `tau=0.25`, `gamma=1.0`, and `floor=0.10`.
 
+The sigmoid gate did increase known AP50 slightly, but it over-suppressed unknown detections:
+
+| Method | Game U_AP50 | Game K_AP50 |
+|---|---:|---:|
+| AutoCal | 30.636 | 10.479 |
+| AutoCal + KnownGate sigmoid t=0.25 | 8.905 | 10.567 |
+
+This shows that direct unknown-objectness suppression can recover a small amount of known AP, but the U_AP50 cost is too large.
+
+### 6.2 Postprocess Known Competition Gate
+
+A less invasive follow-up gates only the postprocess unknown score when the same patch has a sufficiently confident known score and the unknown score is not dominant:
+
+```text
+if max_known_prob >= tau and unknown_prob <= margin * max_known_prob:
+    unknown_prob = floor * unknown_prob
+```
+
+The initial Game run used `tau=0.15`, `margin=1.1`, and `floor=0.05`.
+
+| Method | Game U_AP50 | Game K_AP50 |
+|---|---:|---:|
+| AutoCal | 30.636 | 10.479 |
+| AutoCal + PostprocessGate | 28.883 | 10.468 |
+
+This preserves most of the unknown gain but does not recover known AP. Therefore, Game's remaining K_AP50 gap is likely not primarily caused by unknown stealing known detections. The next direction should target known-class ranking directly, for example with a Game-specific known-preserving profile or support-conditioned known score calibration.
+
+### 6.3 Game Profile Check Without SupportNorm
+
+We also tested whether Game's small K_AP50 drop was caused by support-conditioned normalization. The targeted profile keeps `fit=score`, `balance=0.2`, and `alpha=-1.0`, but disables SupportNorm.
+
+| Method | Game U_AP50 | Game K_AP50 |
+|---|---:|---:|
+| AutoCal | 30.636 | 10.479 |
+| Game score b=0.2 without SupportNorm | 30.476 | 10.481 |
+
+The result is essentially unchanged. The remaining Game K_AP50 gap is therefore not explained by SupportNorm either. This points to known-class score ranking/calibration, not unknown suppression, as the next bottleneck.
+
 ## 7. Conclusion
 
 AutoCal demonstrates that support-conditioned unknown score calibration is a high-impact addition to FOMO-style open-world detection. It establishes a FOMO-beating baseline and reveals the next bottleneck: preserving known-class AP when unknown scoring becomes stronger. The immediate next experiment is AutoCal plus Known-Preserving Gate on Game, followed by PASS-aligned comparisons and residual/detail-attribute scoring.

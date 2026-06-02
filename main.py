@@ -133,6 +133,14 @@ def get_args_parser():
     parser.add_argument('--known_gate_source', default='softmax', type=str,
                         choices=['softmax', 'sigmoid'],
                         help='Known confidence source for the known-preserving gate')
+    parser.add_argument('--use_postprocess_known_gate', action='store_true',
+                        help='Suppress only competing unknown postprocess scores when the same patch has a confident known score')
+    parser.add_argument('--post_gate_known_threshold', default=0.15, type=float,
+                        help='Known probability threshold for postprocess known/unknown competition gating')
+    parser.add_argument('--post_gate_unknown_margin', default=1.1, type=float,
+                        help='Preserve unknown if unknown score is this many times above the best known score')
+    parser.add_argument('--post_gate_floor', default=0.05, type=float,
+                        help='Multiplicative floor for gated unknown postprocess scores')
     # ─── Auto calibration: single switch for the best current unknown scoring stack
     parser.add_argument('--use_auto_unknown_calibration', action='store_true',
                         help='Automatically choose the current best unknown scoring calibration policy')
@@ -360,6 +368,10 @@ def main(args):
                             'known_gate_gamma': args.known_gate_gamma,
                             'known_gate_floor': args.known_gate_floor,
                             'known_gate_source': args.known_gate_source,
+                            'use_postprocess_known_gate': args.use_postprocess_known_gate,
+                            'post_gate_known_threshold': args.post_gate_known_threshold,
+                            'post_gate_unknown_margin': args.post_gate_unknown_margin,
+                            'post_gate_floor': args.post_gate_floor,
                             'support_norm_mean': getattr(args, 'auto_calibration_support_mean', ''),
                             'support_norm_std': getattr(args, 'auto_calibration_support_std', ''),
                             'support_norm_n': getattr(args, 'auto_calibration_support_n', ''),
@@ -426,6 +438,10 @@ def main(args):
                        'known_gate_gamma': args.known_gate_gamma,
                        'known_gate_floor': args.known_gate_floor,
                        'known_gate_source': args.known_gate_source,
+                       'use_postprocess_known_gate': args.use_postprocess_known_gate,
+                       'post_gate_known_threshold': args.post_gate_known_threshold,
+                       'post_gate_unknown_margin': args.post_gate_unknown_margin,
+                       'post_gate_floor': args.post_gate_floor,
                        'support_norm_mean': getattr(args, 'auto_calibration_support_mean', ''),
                        'support_norm_std': getattr(args, 'auto_calibration_support_std', ''),
                        'support_norm_n': getattr(args, 'auto_calibration_support_n', '')})
